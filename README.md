@@ -8,6 +8,7 @@ Customers with RTO and RPO in hours look for backup and restore based DR strateg
 References:
 
 https://docs.aws.amazon.com/aws-backup/latest/devguide/troubleshooting.html
+
 https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-feature-availability.html
 
 For scenarios where AWS backup cannot be used because of region availability or requirement of custom option group etc., the solution is to schedule RDS manual snapshots to run at regular intervals and perform a cross region to ensure cross region DR strategy. As this is not configurable feature with RDS, customers need to write custom automation.
