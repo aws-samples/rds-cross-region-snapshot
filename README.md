@@ -8,7 +8,6 @@ Customers with RTO and RPO in hours look for backup and restore based DR strateg
 References:
 
 https://docs.aws.amazon.com/aws-backup/latest/devguide/troubleshooting.html
-
 https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-feature-availability.html
 
 For scenarios where AWS backup cannot be used because of region availability or requirement of custom option group etc., the solution is to schedule RDS manual snapshots to run at regular intervals and perform a cross region to ensure cross region DR strategy. As this is not configurable feature with RDS, customers need to write custom automation.
@@ -41,7 +40,7 @@ The repository contains a AWS CloudFormation template named **rds-cross-region-s
 6. In **Review and create** step, scroll down to the bottom, acknowledge **I acknowledge that AWS CloudFormation might create IAM resources** and choose **Submit**.
 
 
-## Gotchas / Limitations
+## Considerations / Limitations
 1. Creating RDS snapshot for a Single-AZ DB instance results in a brief I/O suspension that can last from a few seconds to a few minutes, depending on the size and class of your DB instance. Usually it only increases the latency for few seconds when the snapshot is about to complete but something to watch out for. [Reference documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_CreateSnapshot.html)
 2. When you copy a snapshot to a different AWS Region from the source snapshot, the first copy is a full snapshot copy, even if you copy an incremental snapshot. A full snapshot copy contains all of the data and metadata required to restore the DB instance. After the first snapshot copy, you can copy incremental snapshots of the same DB instance to the same destination Region within the same AWS account. [Reference documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_CopySnapshot.html)
 3. The DB instance must be in Available state and no other manual snapshot for the same instance should be running for the snapshots to occur. The retries have been added to lambda function to ensure it doesn’t cause any issues.
