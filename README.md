@@ -16,9 +16,11 @@ For scenarios where AWS backup cannot be used because of region availability or 
 The solution in this code sample is intended to solve that challenge. It can be used as a getting started code sample for automation and orchestration of cross region disaster recovery using AWS Lambda and EventBridge.
 
 ## Pre-requisites
-1. A user with access to AWS Console and full access to services such as CloudFormation, Lambda, IAM, EventBridge and RDS etc.	
+1. A user with access to AWS Console and access to services such as CloudFormation, Lambda, IAM, EventBridge and RDS etc.	
 2. [Optional] Custom option group (s) in the secondary region with exact same settings as primary region (such as timezone or tde etc.).
 3. KMS key in the secondary region.
+
+Please note that this is just a getting started guide for the automation of RDS manual snapshots for the purpose of cross region disaster recovery. You are strongly encouraged to follow the security best practices related to [IAM](https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html#security-best-practices), [Lambda](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html) and other services used in the solution.
 
 ## Step by step guide
 Clone the git repository by executing the below command on Terminal. Refer to [github documentation](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) for more details.
