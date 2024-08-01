@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Deploys cross-region DR stack for RDS with backup-restore based strategy
+Description: Deploys cross-region DR stack for RDS with backup-restore based DR strategy
 Parameters:
   SecondaryRegion:
     Type: String
