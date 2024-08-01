@@ -6,7 +6,9 @@ Disaster recovery (DR) is the process by which an organization anticipates and a
 Customers with RTO and RPO in hours look for backup and restore based DR strategy as a cost effective solution. AWS Backup is a cost-effective, fully managed, policy-based service that simplifies DR strategy in same region as well as well as across the regions. However, AWS Backup is not available in all the regions and it does not support cross region copy of RDS backups if a custom option group is used. Customers use custom option groups for RDS in scenarios such as TDE and Timezone configurations etc.
 
 References:
+
 https://docs.aws.amazon.com/aws-backup/latest/devguide/troubleshooting.html
+
 https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-feature-availability.html
 
 For scenarios where AWS backup cannot be used because of region availability or requirement of custom option group etc., the solution is to schedule RDS manual snapshots to run at regular intervals and perform a cross region to ensure cross region DR strategy. As this is not configurable feature with RDS, customers need to write custom automation.
@@ -21,7 +23,9 @@ The solution in this code sample is intended to solve that challenge. It can be 
 ## Step by step guide
 Clone the git repository by executing the below command on Terminal. Refer to [github documentation](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) for more details.
 
+```
 git clone https://github.com/aws-samples/rds-cross-region-snapshot
+```
 
 The repository contains a AWS CloudFormation template named **rds-cross-region-snapshot-cft**. Use the below steps to deploy that in the required AWS account:
 
