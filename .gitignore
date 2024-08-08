@@ -1,0 +1,4 @@
+.venv
+.venv/
+lambda_functions
+lambda_functions/

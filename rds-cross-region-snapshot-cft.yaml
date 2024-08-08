@@ -137,28 +137,34 @@ Resources:
           from datetime import datetime, timedelta
           import time
           import os
+
           def lambda_handler(event, context):
               rdsClient = boto3.client('rds')
+              
               retentionInDays = int(os.environ['retentionInDays'])
               destinationRegion = os.environ['destinationRegion']
-              
               includeDatabases = json.loads(os.environ['includeDatabases'])
+              excludeDatabases = json.loads(os.environ['excludeDatabases']) #exclude is ignored if include list is provided
+              snapshotProcessName = os.environ['snapshotProcessName']
+              deleteRequired = 0 #delete will trigger only if deleteRequired is 1
+              pageToken = "start"
+              
+              deleteSnapshotsDate = datetime.utcnow().astimezone() - timedelta(days = retentionInDays)
+
               if len(includeDatabases) == 1:
                   if len(includeDatabases[0]) == 0:
                       includeDatabases = []
-
-              excludeDatabases = json.loads(os.environ['excludeDatabases']) #exclude is ignored if include list is provided
+                      
               if len(excludeDatabases) == 1:
                   if len(excludeDatabases[0]) == 0:
                       excludeDatabases = []
-
-              pageToken = "start"
-              deleteSnapshotsDate = datetime.utcnow().astimezone() - timedelta(days = retentionInDays)
+              
               print(f"The snapshots with creation date before timestamp: {deleteSnapshotsDate.strftime('%Y-%m-%d %H:%M:%S')} would be deleted (retention period: {retentionInDays} days)")
               print(f"Include list of databases: {includeDatabases}")
               print(f"Exclude list of databases: {excludeDatabases}")
               print(f"Starting clean-up in primary region: {os.environ['AWS_REGION']}")
-              while pageToken != "":
+              
+              while pageToken != "":  
                   if len(includeDatabases) == 0:
                       if pageToken == 'start':
                           snapshotListRsep = rdsClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100)
@@ -168,25 +174,37 @@ Resources:
                       if pageToken == 'start':
                           snapshotListRsep = rdsClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])
                       else:
-                          snapshotListRsep = rdsClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Marker = pageToken, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])
+                          snapshotListRsep = rdsClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Marker = pageToken, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])                
+
                   if 'Marker' in snapshotListRsep:
                       pageToken = snapshotListRsep['Marker']
                   else:
                       pageToken = ""
+              
                   #Getting list of DB Snapshots to delete
                   if 'DBSnapshots' in snapshotListRsep:
                       for DBSnapshot in snapshotListRsep['DBSnapshots']:
-                          # and DBSnapshot['Status'] == 'available'
                           if (DBSnapshot['DBInstanceIdentifier'] not in excludeDatabases or len(includeDatabases) > 0) and DBSnapshot['OriginalSnapshotCreateTime'] < deleteSnapshotsDate and DBSnapshot['Status'] == 'available':
-                              #print(DBSnapshot)
-                              print(f"Deleting snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}, snapshot creation date: {DBSnapshot['OriginalSnapshotCreateTime'].strftime('%Y-%m-%d %H:%M:%S')})")
-                              response = rdsClient.delete_db_snapshot(DBSnapshotIdentifier=DBSnapshot['DBSnapshotIdentifier'])
+                              deleteRequired = 0
+                              if 'TagList' in DBSnapshot:
+                                  for SnapshotTag in DBSnapshot['TagList']:
+                                      if SnapshotTag['Key'] == 'SnapshotProcessName' and SnapshotTag['Value'] == snapshotProcessName:
+                                          deleteRequired = 1
+
+                              if deleteRequired == 1:
+                                  print(f"Deleting snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}, snapshot creation date: {DBSnapshot['OriginalSnapshotCreateTime'].strftime('%Y-%m-%d %H:%M:%S')})")
+                                  response = rdsClient.delete_db_snapshot(DBSnapshotIdentifier=DBSnapshot['DBSnapshotIdentifier'])
+                              else:
+                                  print(f"Skipping to delete snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}) as it is not managed by the automation process")
+              
               print(f"Starting clean-up in secondary region: {destinationRegion}")
+              
               #Setting up connection for destination region
               rdsDestClientConfig = Config(region_name = destinationRegion)
               rdsDestClient = boto3.client('rds', config = rdsDestClientConfig)
               pageToken = "start"
-              while pageToken != "":
+
+              while pageToken != "":  
                   if len(includeDatabases) == 0:
                       if pageToken == 'start':
                           snapshotListRsep = rdsDestClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100)
@@ -196,19 +214,29 @@ Resources:
                       if pageToken == 'start':
                           snapshotListRsep = rdsDestClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])
                       else:
-                          snapshotListRsep = rdsDestClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Marker = pageToken, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])
+                          snapshotListRsep = rdsDestClient.describe_db_snapshots(SnapshotType = 'manual', MaxRecords = 100, Marker = pageToken, Filters = [{'Name': 'db-instance-id', 'Values': includeDatabases}])                
+
                   if 'Marker' in snapshotListRsep:
                       pageToken = snapshotListRsep['Marker']
                   else:
                       pageToken = ""
+              
                   #Getting list of DB Snapshots to delete
                   if 'DBSnapshots' in snapshotListRsep:
                       for DBSnapshot in snapshotListRsep['DBSnapshots']:
-                          # and DBSnapshot['Status'] == 'available'
                           if (DBSnapshot['DBInstanceIdentifier'] not in excludeDatabases or len(includeDatabases) > 0) and DBSnapshot['OriginalSnapshotCreateTime'] < deleteSnapshotsDate and DBSnapshot['Status'] == 'available':
-                              #print(DBSnapshot)
-                              print(f"Deleting snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}, snapshot creation date: {DBSnapshot['OriginalSnapshotCreateTime'].strftime('%Y-%m-%d %H:%M:%S')})")
-                              response = rdsDestClient.delete_db_snapshot(DBSnapshotIdentifier=DBSnapshot['DBSnapshotIdentifier'])
+                              deleteRequired = 0
+                              if 'TagList' in DBSnapshot:
+                                  for SnapshotTag in DBSnapshot['TagList']:
+                                      if SnapshotTag['Key'] == 'SnapshotProcessName' and SnapshotTag['Value'] == snapshotProcessName:
+                                          deleteRequired = 1
+
+                              if deleteRequired == 1:        
+                                  print(f"Deleting snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}, snapshot creation date: {DBSnapshot['OriginalSnapshotCreateTime'].strftime('%Y-%m-%d %H:%M:%S')})")
+                                  response = rdsDestClient.delete_db_snapshot(DBSnapshotIdentifier=DBSnapshot['DBSnapshotIdentifier'])
+                              else:
+                                  print(f"Skipping to delete snapshot {DBSnapshot['DBSnapshotIdentifier']} (databse: {DBSnapshot['DBInstanceIdentifier']}) as it is not managed by the automation process")
+
               return {
                   'statusCode': 200,
                   'body': "Completed"
@@ -222,6 +250,7 @@ Resources:
           includeDatabases: !Join ["", ["[\"", !Join ["\",\"", !Ref IncludeDatabases], "\"]"]]
           excludeDatabases: !Join ["", ["[\"", !Join ["\",\"", !Ref ExcludeDatabases], "\"]"]]
           retentionInDays: !Ref SnapshotRetentionInDays
+          snapshotProcessName: !Ref AWS::StackName
   LambdaRDSSnapshotCreate:
     Type: AWS::Lambda::Function
     DeletionPolicy: Delete
@@ -248,13 +277,14 @@ Resources:
               DBList = []
               retryLimit = int(os.environ['retryCount'])
               secondsBetweenRetries = int(os.environ['secondsBetweenRetries'])
-              
+              snapshotProcessName = os.environ['snapshotProcessName']
               includeDatabases = json.loads(os.environ['includeDatabases'])
+              excludeDatabases = json.loads(os.environ['excludeDatabases']) #exclude is ignored if include list is provided
+
               if len(includeDatabases) == 1:
                   if len(includeDatabases[0]) == 0:
                       includeDatabases = []
-              
-              excludeDatabases = json.loads(os.environ['excludeDatabases']) #exclude is ignored if include list is provided
+
               if len(excludeDatabases) == 1:
                   if len(excludeDatabases[0]) == 0:
                       excludeDatabases = []
@@ -300,12 +330,15 @@ Resources:
                                       'Key': 'SnapshotStartTime',
                                       'Value': currentDateTime
                                   },
+                                  {
+                                      'Key': 'SnapshotProcessName',
+                                      'Value': snapshotProcessName
+                                  }
                               ]
                           )
                           
                           failureCode = 0
                       except botocore.exceptions.ClientError as error:
-                          #print(error.response)
                           if error.response['Error']['Code'] == 'InvalidDBInstanceStateFault':
                               print(f'DB instance: {DBIdentifier} is not in Available state.')
                           elif error.response['Error']['Code'] == 'InvalidDBInstanceState':
@@ -338,6 +371,7 @@ Resources:
           secondsBetweenRetries: "60"
           includeDatabases: !Join ["", ["[\"", !Join ["\",\"", !Ref IncludeDatabases], "\"]"]]
           excludeDatabases: !Join ["", ["[\"", !Join ["\",\"", !Ref ExcludeDatabases], "\"]"]]
+          snapshotProcessName: !Ref AWS::StackName
   LambdaRDSSnapshotCopy:
     Type: AWS::Lambda::Function
     DeletionPolicy: Delete
@@ -358,35 +392,51 @@ Resources:
               destinationRegion = os.environ['destinationRegion']
               destinationKmsKeyId = os.environ['destinationKmsKeyId']
               destinationOptionGroups = json.loads(os.environ['destinationOptionGroups'])
+              snapshotProcessName = os.environ['snapshotProcessName']
+              copyRequired = 0 #copy will trigger only if copyRequired is 1
               
-              #Setting up connection for destination region
-              rdsClientConfig = Config(region_name = destinationRegion)
-              rdsClient = boto3.client('rds', config = rdsClientConfig)
+              rdsClient = boto3.client('rds')
               
-              currentDateTime = datetime.today().strftime('%Y%m%d%H%M%S')
-              
-              print(f"Copying Snapshot {event['detail']['SourceIdentifier']} from region {os.environ['AWS_REGION']} to {destinationRegion}")
-              
-              #Assumption is that snapshot identifier is DBIdentifier + '-' followed by some suffix
-              DBIdentifier = '-'.join(event['detail']['SourceIdentifier'].split('-')[:-1])
-              
-              if DBIdentifier in destinationOptionGroups:
-                  copySnapshotResp = rdsClient.copy_db_snapshot(
-                          SourceDBSnapshotIdentifier = event['detail']['SourceArn'],
-                          TargetDBSnapshotIdentifier = event['detail']['SourceIdentifier'],
-                          KmsKeyId = destinationKmsKeyId,
-                          CopyTags = True,
-                          OptionGroupName = destinationOptionGroups[DBIdentifier],
-                          SourceRegion = os.environ['AWS_REGION']
-                      )
+              #Get snapshot tags
+              snapshotListRsep = rdsClient.describe_db_snapshots(DBSnapshotIdentifier = event['detail']['SourceIdentifier'], SnapshotType = 'manual')
+
+              #Checking if snapshot was created by the automation process
+              if 'DBSnapshots' in snapshotListRsep:
+                  for DBSnapshot in snapshotListRsep['DBSnapshots']:
+                      if 'TagList' in DBSnapshot:
+                          for SnapshotTag in DBSnapshot['TagList']:
+                              if SnapshotTag['Key'] == 'SnapshotProcessName' and SnapshotTag['Value'] == snapshotProcessName:
+                                  copyRequired = 1
+
+              if copyRequired == 1:
+                  print(f"Copying Snapshot {event['detail']['SourceIdentifier']} from region {os.environ['AWS_REGION']} to {destinationRegion}")
+
+                  #Setting up connection for destination region
+                  rdsDestClientConfig = Config(region_name = destinationRegion)
+                  rdsDestClient = boto3.client('rds', config = rdsDestClientConfig)
+
+                  #Assumption is that snapshot identifier is DBIdentifier + '-' followed by some suffix
+                  DBIdentifier = '-'.join(event['detail']['SourceIdentifier'].split('-')[:-1])
+                  
+                  if DBIdentifier in destinationOptionGroups:
+                      copySnapshotResp = rdsDestClient.copy_db_snapshot(
+                              SourceDBSnapshotIdentifier = event['detail']['SourceArn'],
+                              TargetDBSnapshotIdentifier = event['detail']['SourceIdentifier'],
+                              KmsKeyId = destinationKmsKeyId,
+                              CopyTags = True,
+                              OptionGroupName = destinationOptionGroups[DBIdentifier],
+                              SourceRegion = os.environ['AWS_REGION']
+                          )
+                  else:
+                      copySnapshotResp = rdsDestClient.copy_db_snapshot(
+                              SourceDBSnapshotIdentifier = event['detail']['SourceArn'],
+                              TargetDBSnapshotIdentifier = event['detail']['SourceIdentifier'],
+                              KmsKeyId = destinationKmsKeyId,
+                              CopyTags = True,
+                              SourceRegion = os.environ['AWS_REGION']
+                          )
               else:
-                  copySnapshotResp = rdsClient.copy_db_snapshot(
-                          SourceDBSnapshotIdentifier = event['detail']['SourceArn'],
-                          TargetDBSnapshotIdentifier = event['detail']['SourceIdentifier'],
-                          KmsKeyId = destinationKmsKeyId,
-                          CopyTags = True,
-                          SourceRegion = os.environ['AWS_REGION']
-                      )
+                  print(f"Skipping cross region snapshot copy for {event['detail']['SourceIdentifier']} as it is not managed with the automation process")
 
               return {
                   'statusCode': 200,
@@ -400,6 +450,7 @@ Resources:
           destinationRegion: !Ref SecondaryRegion
           destinationKmsKeyId: !Ref SecondaryRegionKMSArn
           destinationOptionGroups: !Ref SecondaryRegionOptionGroups
+          snapshotProcessName: !Ref AWS::StackName
 Outputs:
   IAMRoleForLambda:
     Description: The IAM Role assumed by the lambda functions

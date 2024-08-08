@@ -39,6 +39,7 @@ The repository contains a AWS CloudFormation template named **rds-cross-region-s
  ![cft-step2](static/create-stack-step2.png)
 5. Leave everything as default in **Configure stack options** step and choose Next.
 6. In **Review and create** step, scroll down to the bottom, acknowledge **I acknowledge that AWS CloudFormation might create IAM resources** and choose **Submit**.
+7. Go to **Outputs** tab of the stack and note down the value of **IAMRoleForLambda**. Add this role as **Key User** for the KMS key in secondary region. It is required to ensure that the key can be used for encrypting the snapshot in secondary region.
 
 
 ## Considerations / Limitations
